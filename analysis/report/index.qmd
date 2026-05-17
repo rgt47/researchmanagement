@@ -2,9 +2,6 @@
 title: >
   A Mac Workflow for Tracking Daily Research
   Progress
-subtitle: >
-  Using ChatGPT dictation, bash scripts, and Git
-  to build a searchable research log
 author: "Ronald 'Ryy' G. Thomas"
 date: "2025-04-12"
 categories: [shell, git, macos]
@@ -30,7 +27,7 @@ format:
 
 ![A well-organized research workspace ready for
 daily progress tracking](media/images/hero.jpg){
-.img-fluid width=80%}
+.img-fluid width=80% fig-align="center"}
 
 *Structured workflows turn scattered research
 notes into a searchable knowledge base.*
