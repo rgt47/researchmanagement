@@ -52,14 +52,14 @@ capabilities in a few short bash scripts and pushing
 results to Git, I had a daily research logging system
 that required almost no manual typing.
 
-This post documents that workflow from start to finish.
+We document that workflow from start to finish.
 It covers the folder structure, the dictation prompt
 script, the log-appending script, the search script,
 and the Git integration that ties everything together.
 The entire system runs from the terminal with three
 short commands.
 
-More formally, this post documents the file-system layer of
+More formally, we document the file-system layer of
 the Workflow Construct described in
 [post 52](/posts/52-workflow-construct/). The convention that
 all research projects live under `~/prj/NN-name/`, are synced
@@ -133,9 +133,8 @@ following tools available:
   double-tap the Function key)
 
 No R packages are required for this workflow. The
-entire system runs through the shell. If you do not
-have `ripgrep` installed, you can add it with
-Homebrew:
+entire system runs through the shell. If `ripgrep`
+is not yet installed, it can be added with Homebrew:
 
 ```sh
 brew install ripgrep
@@ -150,8 +149,8 @@ progress notes using macOS voice input, submits the
 raw dictation to ChatGPT for summarization and
 formatting, and stores the resulting structured
 summary in a version-controlled text file. Think of
-it as having a research assistant who listens to your
-stream-of-consciousness update and hands back a clean,
+it as having a research assistant who listens to one's
+stream-of-consciousness update and returns a clean,
 dated, project-tagged paragraph.
 
 The key insight is that the summarization step solves
@@ -180,13 +179,13 @@ mkdir -p ~/prj/research_update \
 Each project folder should contain a consistent
 internal structure:
 
-- `notes.md` -- Running log of project-specific notes
-- `references.bib` -- Citation management
-- `data/` -- Datasets and related files
-- `coding/` -- Code and analyses
-- `figures/` -- Graphs and visualizations
-- `tables/` -- Data summaries
-- `archive/` -- Storage for non-current files
+- `notes.md`: Running log of project-specific notes
+- `references.bib`: Citation management
+- `data/`: Datasets and related files
+- `coding/`: Code and analyses
+- `figures/`: Graphs and visualizations
+- `tables/`: Data summaries
+- `archive/`: Storage for non-current files
 
 The centralized daily log lives at a fixed location
 that all scripts reference:
@@ -229,8 +228,8 @@ captured automatically.
 
 This script constructs a ChatGPT prompt that includes
 the current date, time, and project directory name. It
-copies the prompt to the clipboard so that the
-researcher can paste it directly into ChatGPT.
+copies the prompt to the clipboard so the researcher
+can paste it directly into ChatGPT.
 
 ```sh
 #!/bin/bash
@@ -299,7 +298,7 @@ After running `dp`, the workflow proceeds as follows:
 This script reads the summary from the clipboard,
 appends it to the centralized daily log, and pushes
 the update to the remote Git repository. Save it
-somewhere on your `$PATH` (for example,
+somewhere on the `$PATH` (for example,
 `~/bin/append_log`).
 
 ```sh
@@ -354,10 +353,10 @@ makes the single-file approach practical.
 
 ## Things to Watch Out For
 
-1. **Clipboard conflicts.** If you copy something
-   else to the clipboard between running `dp` and
-   pasting into ChatGPT, the prompt is lost. Run `dp`
-   immediately before switching to ChatGPT.
+1. **Clipboard conflicts.** Copying anything else
+   between running `dp` and pasting into ChatGPT
+   will overwrite the prompt. Run `dp` immediately
+   before switching to ChatGPT.
 
 2. **Project directory naming.** The `ripgrep` search
    matches on directory name, so avoid names that are
@@ -517,13 +516,12 @@ voice dictation and automated summarization, the
 barrier dropped low enough that daily logging became
 sustainable.
 
-If you are managing multiple concurrent research
-projects and struggling to maintain a consistent
-record of progress, I would encourage you to try this
-approach. The three scripts are short enough to
-customize in an afternoon, and the payoff in
-searchable, version-controlled documentation
-accumulates rapidly.
+Researchers managing multiple concurrent projects
+who struggle to maintain consistent progress records
+may find this approach worth adopting. The three
+scripts are short enough to customise in an
+afternoon, and the payoff in searchable,
+version-controlled documentation accumulates rapidly.
 
 **Main takeaways:**
 
