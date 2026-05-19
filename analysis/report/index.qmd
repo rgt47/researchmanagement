@@ -283,7 +283,7 @@ After running `dp`, the workflow proceeds as follows:
    ChatGPT input field.
 3. Submit the prompt so that ChatGPT is primed for
    summarization.
-4. Click the ChatGPT microphone icon and dictate your
+4. Click the ChatGPT microphone icon and dictate the
    research notes. Speak naturally; there is no need
    to say "new line" or "period" because ChatGPT will
    handle formatting.
@@ -333,7 +333,7 @@ separated in the log file.
 This script searches the daily log for all entries
 tagged with the current project directory name. The
 `cut -c6-` strips the directory prefix from each line
-for cleaner output. Adjust the cut range if your
+for cleaner output. Adjust the cut range if the
 project directory names are longer than four
 characters.
 
@@ -362,7 +362,7 @@ makes the single-file approach practical.
    matches on directory name, so avoid names that are
    substrings of other names. `X1` will match `X10`
    entries. Use names like `proj_alpha` instead of
-   sequential numbers if you have many projects.
+   sequential numbers when managing many projects.
 
 3. **Git remote setup.** The append script assumes a
    remote is configured. Run `git remote add origin
@@ -378,7 +378,7 @@ makes the single-file approach practical.
 5. **Cut column offset.** The `cut -c6-` in the
    search script assumes a four-character project
    name plus a colon and space. Adjust this value if
-   your directory names are longer.
+   directory names are longer than four characters.
 
 
 ![Organized notes and tools for daily research
@@ -505,8 +505,8 @@ tracking](media/images/ambiance3.jpg){.img-fluid}
 
 This workflow turns daily research logging from a
 chore into a lightweight habit. The entire process
--- dictating notes, generating a summary, appending
-to the log, and pushing to Git -- takes under ninety
+(dictating notes, generating a summary, appending
+to the log, and pushing to Git) takes under ninety
 seconds once the scripts are in place.
 
 What I found most valuable was the reduction in
@@ -523,16 +523,18 @@ scripts are short enough to customise in an
 afternoon, and the payoff in searchable,
 version-controlled documentation accumulates rapidly.
 
-**Main takeaways:**
-
-- Three bash scripts (`dp`, append, `sp`) provide a
-  complete dictation-to-search workflow.
-- ChatGPT summarization converts raw voice dictation
-  into concise, structured log entries.
-- Project-prefixed lines enable per-project retrieval
-  from a single centralized log file.
-- Git integration provides version control and remote
-  backup with no additional effort.
+In conclusion, four points merit emphasis. First,
+three bash scripts (`dp`, append, `sp`) together
+provide a complete dictation-to-search workflow
+without additional tooling. Second, ChatGPT
+summarization converts raw voice dictation into
+concise, structured log entries suitable for
+long-term storage. Third, project-prefixed lines
+enable per-project retrieval from a single
+centralized log file, eliminating the need for
+per-project files. Fourth, Git integration provides
+version control and remote backup with no effort
+beyond what the append script already performs.
 
 
 # See Also
@@ -541,27 +543,27 @@ version-controlled documentation accumulates rapidly.
 
 - [Configure the Command Line for Data Science
   Development](../01-configtermzsh/configtermzsh/
-  analysis/report/) -- Terminal and Zsh setup that
+  analysis/report/): Terminal and Zsh setup that
   complements this workflow
 - [Creating a GitHub Dotfiles Repository](
   ../24-setupdotfilesongithub/setupdotfilesongithub/
-  analysis/report/) -- Managing configuration files
+  analysis/report/): Managing configuration files
   across machines
 
 **Key resources:**
 
 - [ripgrep documentation](
-  https://github.com/BurntSushi/ripgrep) -- The
+  https://github.com/BurntSushi/ripgrep): The
   search tool used in the `sp` script
 - [OpenAI Whisper](
-  https://github.com/openai/whisper) -- Local
+  https://github.com/openai/whisper): Local
   speech-to-text alternative to macOS dictation
-- [Git documentation](https://git-scm.com/doc) --
+- [Git documentation](https://git-scm.com/doc):
   Reference for the version control commands used
   in the append script
 - [macOS Dictation guide (Apple Support)](
   https://support.apple.com/guide/mac-help/
-  use-dictation-mh40584/mac) -- Setup instructions
+  use-dictation-mh40584/mac): Setup instructions
   for the built-in dictation feature
 
 
@@ -569,7 +571,7 @@ version-controlled documentation accumulates rapidly.
 
 This post describes a shell-based workflow with no R
 analysis pipeline. To reproduce the system, create the
-three scripts described above and place them on your
+three scripts described above and place them on the
 `$PATH`:
 
 ```sh
