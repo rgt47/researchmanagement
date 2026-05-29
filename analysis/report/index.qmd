@@ -24,7 +24,7 @@ format:
     code-fold: false
     code-tools: false
 cluster: shell-and-git
-cluster-order: 3
+cluster-order: 2
 ---
 
 ![A well-organized research workspace ready for
@@ -630,6 +630,5 @@ This post is part of the *Shell Scripting and Git Tooling* series.
 Recommended reading order:
 
 1. Post 41: [Refactoring a Personal Toolbox: Scripts versus Shell Functions](../41-sh-scripts-vs-functions/)
-2. Post 42: [zzgit: An interactive staging and commit wizard for zsh](../42-sh-zzgit-commit-wizard/)
-3. **Post 43: A Mac Workflow for Tracking Daily Research Progress** (this post)
+2. **Post 43: A Mac Workflow for Tracking Daily Research Progress** (this post)
 
