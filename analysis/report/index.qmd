@@ -12,7 +12,7 @@ description: >
   short bash scripts. This post walks through the
   entire workflow from folder structure to
   searchable, version-controlled notes.
-image: "media/images/hero.jpg"
+image: "media/images/hero.png"
 document-type: "blog"
 draft: false
 execute:
@@ -28,7 +28,7 @@ cluster-order: 2
 ---
 
 ![A well-organized research workspace ready for
-daily progress tracking](media/images/hero.jpg){
+daily progress tracking](media/images/hero.png){
 .img-fluid width=80% fig-align="center"}
 
 *Structured workflows turn scattered research
