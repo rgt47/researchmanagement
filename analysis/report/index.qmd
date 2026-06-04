@@ -14,7 +14,7 @@ description: >
   searchable, version-controlled notes.
 image: "media/images/hero.png"
 document-type: "blog"
-draft: false
+draft: true
 execute:
   echo: true
   warning: false
@@ -384,7 +384,7 @@ makes the single-file approach practical.
 
 
 ![Organized notes and tools for daily research
-tracking](media/images/ambiance3.jpg){.img-fluid}
+tracking](media/images/ambiance3.png){.img-fluid}
 
 
 # What Did We Learn?
