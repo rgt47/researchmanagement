@@ -14,7 +14,7 @@ description: >
   searchable, version-controlled notes.
 image: "media/images/hero.png"
 document-type: "blog"
-draft: true
+draft: false
 execute:
   echo: true
   warning: false
