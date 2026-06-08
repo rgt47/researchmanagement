@@ -2,7 +2,7 @@
 title: >
   A Mac Workflow for Tracking Daily Research
   Progress
-author: "Ronald 'Ryy' G. Thomas"
+author: "Ronald G. Thomas"
 date: "2025-04-12"
 categories: [shell, git, macos]
 description: >
