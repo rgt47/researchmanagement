@@ -1,17 +1,9 @@
 ---
-title: >
-  A Mac Workflow for Tracking Daily Research
-  Progress
+title: "A Mac Workflow for Tracking Daily Research Progress"
 author: "Ronald G. Thomas"
 date: "2025-04-12"
 categories: [shell, git, macos]
-description: >
-  I did not really know how to keep a consistent
-  daily research log until I combined macOS
-  dictation with ChatGPT summarization and a few
-  short bash scripts. This post walks through the
-  entire workflow from folder structure to
-  searchable, version-controlled notes.
+description: "I did not really know how to keep a consistent daily research log until I combined macOS dictation with ChatGPT summarization and a few short bash scripts. This post walks through the entire workflow from folder structure to searchable, version-controlled notes."
 image: "media/images/hero.png"
 document-type: "blog"
 draft: true
@@ -209,7 +201,7 @@ git commit -m "Initialize daily research log"
 
 
 ![Workspace tools arranged for a productive research
-session](media/images/ambiance2.png){.img-fluid}
+session](media/images/ambiance2.png){.img-fluid height=3.5in}
 
 
 # Deeper Analysis: The Three-Script Workflow
@@ -380,7 +372,7 @@ makes the single-file approach practical.
 
 
 ![Organized notes and tools for daily research
-tracking](media/images/ambiance3.png){.img-fluid}
+tracking](media/images/ambiance3.png){.img-fluid height=3.5in}
 
 
 # What Did We Learn?
