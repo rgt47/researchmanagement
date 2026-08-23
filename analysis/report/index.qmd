@@ -51,7 +51,7 @@ short commands.
 
 More formally, we document the file-system layer of
 the Workflow Construct described in
-[post 52](/posts/52-workflow-construct/). The convention that
+[A Workflow Construct for the Modern Data Scientist](../wf-construct-overview-anchor/). The convention that
 all research projects live under `~/prj/NN-name/`, are synced
 continuously by Dropbox, and are snapshotted intentionally by
 Git, is the substrate on which every other layer depends. The
@@ -535,13 +535,11 @@ beyond what the append script already performs.
 
 **Related posts:**
 
-- [Configure the Command Line for Data Science
-  Development](../01-configtermzsh/configtermzsh/
-  analysis/report/): Terminal and Zsh setup that
+- [Unix Command-Line Workspace Setup for Data Science
+  Development](../wf-unix-workspace-config/): Terminal and Zsh setup that
   complements this workflow
-- [Creating a GitHub Dotfiles Repository](
-  ../24-setupdotfilesongithub/setupdotfilesongithub/
-  analysis/report/): Managing configuration files
+- [Multi-Laptop macOS Bootstrap](
+  ../wf-multi-laptop-dotfiles-bootstrap/): Managing configuration files
   across machines
 
 **Key resources:**
