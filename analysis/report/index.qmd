@@ -15,8 +15,9 @@ cluster: shell-and-git
 cluster-order: 2
 ---
 
-![A well-organized research workspace ready for
-daily progress tracking](media/images/hero.png){
+![A desk calendar open to today's date, a pen resting
+across it, dog-eared pages beneath: a running daily
+log](media/images/hero.jpg){
 .img-fluid width=80% fig-align="center"}
 
 *Structured workflows turn scattered research
@@ -200,8 +201,9 @@ git commit -m "Initialize daily research log"
 ```
 
 
-![Workspace tools arranged for a productive research
-session](media/images/ambiance2.png){.img-fluid height=3.5in}
+![A single handwritten index card filed behind a tabbed
+divider in an open wooden card box: one day's entry in
+a running log](media/images/ambiance2.jpg){.img-fluid height=3.5in}
 
 
 # Deeper Analysis: The Three-Script Workflow
@@ -375,8 +377,9 @@ makes the single-file approach practical.
    directory names are longer than four characters.
 
 
-![Organized notes and tools for daily research
-tracking](media/images/ambiance3.png){.img-fluid height=3.5in}
+![A stack of identical dated notebooks of increasing
+height, the newest on top still open: accumulated
+daily records over time](media/images/ambiance3.jpg){.img-fluid height=3.5in}
 
 
 # What Did We Learn?

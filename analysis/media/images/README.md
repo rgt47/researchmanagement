@@ -1,5 +1,25 @@
 # Image attributions
 
+## Status (2026-08-25)
+
+`hero.jpg`, `ambiance2.jpg`, and `ambiance3.jpg` are genuine Gemini
+generations as of 2026-08-25 (generated via the `gemini-image-generator`
+tool), replacing a generic reused coffee/window stock photo shared
+across other posts. `ambiance1` (a living-room desk scene) was already
+a plausible, unique fit and was left as-is.
+
+- `hero.jpg`: a desk calendar open to today's date, a pen resting
+  across it, dog-eared pages beneath. Metaphor: a running daily log.
+- `ambiance2.jpg`: a single handwritten index card filed behind a
+  tabbed divider in an open wooden card box. Metaphor: one day's
+  entry in a running log.
+- `ambiance3.jpg`: a stack of identical dated notebooks of increasing
+  height, the newest on top still open. Metaphor: accumulated daily
+  records over time.
+
+All three processed via `magick -resize 1600x -strip -quality 85` to
+1600x873.
+
 ## Placeholder coffee images (temporary ambiance slots)
 
 These images are shared placeholders used across all posts until replaced
