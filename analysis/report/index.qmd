@@ -3,7 +3,7 @@ title: "A Mac Workflow for Tracking Daily Research Progress"
 author: "Ronald G. Thomas"
 date: "2025-04-12"
 categories: [shell, git, macos]
-description: "I did not really know how to keep a consistent daily research log until I combined macOS dictation with ChatGPT summarization and a few short bash scripts. This post walks through the entire workflow from folder structure to searchable, version-controlled notes."
+description: "tn is a single bash script that talks to the Gemini API directly, stores one note file per research project, and supports reviewing, editing, and deleting past entries. This post documents what the script actually does, not the three-script ChatGPT-and-clipboard sketch it replaced."
 image: "media/images/hero.png"
 document-type: "blog"
 draft: true
@@ -35,71 +35,68 @@ the entry, and committing the changes felt like too
 many steps for something that should take sixty
 seconds.
 
-The breakthrough came when I realized that macOS
-dictation could capture my thoughts hands-free, and
-ChatGPT could turn rambling voice notes into concise,
-structured summaries. By wrapping these two
-capabilities in a few short bash scripts and pushing
-results to Git, I had a daily research logging system
-that required almost no manual typing.
+The first version of this idea, sketched out but never
+actually built, was a three-script pipeline: dictate
+into ChatGPT's web interface, copy the summary to the
+clipboard, and run a script to append it to a single
+tagged log file. What I actually ended up building and
+using every day is different in almost every respect.
+It is one script, `tn`, and it talks to Google's Gemini
+API directly through `curl`, with no browser and no
+clipboard hop in the middle.
 
-We document that workflow from start to finish.
-It covers the folder structure, the dictation prompt
-script, the log-appending script, the search script,
-and the Git integration that ties everything together.
-The entire system runs from the terminal with three
-short commands.
+This post documents `tn` as it exists on disk today:
+what it stores, how the pieces fit together, and where
+its rough edges are. Some of those rough edges are
+worth calling out explicitly, because they are the kind
+of thing that is easy to miss when a script has grown
+past its original design in small increments.
 
-More formally, we document the file-system layer of
+More formally, this documents the file-system layer of
 the Workflow Construct described in
 [A Workflow Construct for the Modern Data Scientist](../wf-construct-overview-anchor/). The convention that
-all research projects live under `~/prj/NN-name/`, are synced
-continuously by Dropbox, and are snapshotted intentionally by
-Git, is the substrate on which every other layer depends. The
-dictation-driven research-log workflow described below is one
-specific use of that substrate.
+all research projects live under `~/prj/NN-name/` and are synced
+continuously by Dropbox is the substrate `tn` depends on: its
+notes directory, `~/prj/research_update`, is itself a Dropbox-synced
+path, even though (as covered below) it is not a Git repository.
 
 ## Motivations
 
 - I was managing ten research projects simultaneously
   and could not remember which analyses I had run two
   weeks earlier on any given project.
+- A single log file tagged by project name, which is
+  what the original design called for, does not
+  support editing or deleting an individual entry
+  without hand-editing the file. I wanted commands for
+  that.
 - Handwritten lab notebooks did not support full-text
   search, which made retrieval slow and unreliable.
-- Existing note-taking applications introduced too
-  many dependencies and did not integrate with my
-  Git-based version control workflow.
-- I wanted a system that could produce a structured
-  log entry in under ninety seconds, including the
-  commit and push to a remote repository.
+- Round-tripping through a browser tab (paste prompt,
+  dictate, copy summary, switch back to the terminal)
+  was more friction than dictating directly and letting
+  a script call the summarization API itself.
+- I needed the ability to revise a summary Gemini
+  produced, not just accept or reject it outright.
 - Voice dictation felt like the lowest-friction input
   method, but raw dictation output is too messy to
   store directly.
-- I needed per-project search capability so that
-  running a single command from any project directory
-  would surface all related log entries.
 
 
 ## Objectives
 
-1. Set up a structured directory layout for managing
-   multiple concurrent research projects.
-2. Create a bash script (`dp`) that generates a
-   formatted ChatGPT prompt, priming the model for
-   research note summarization.
-3. Build an append-and-push script that copies a
-   ChatGPT summary from the clipboard into a
-   centralized daily log and commits the update to
-   Git.
-4. Write a search script (`sp`) that retrieves all
-   log entries for the current project using
-   `ripgrep`.
+1. Store research notes per project, one text file per
+   project name, inside a single central directory.
+2. Send dictated or typed notes to the Gemini API for
+   summarization, from inside the same script that
+   captures them, with no manual copy-paste step.
+3. Support an accept, reject, edit, or revise loop on
+   every generated summary before it is saved.
+4. Provide commands to review, edit, and delete past
+   entries by index or date, not just append new ones.
 
 I am documenting my learning process here. If you spot
 errors or have better approaches, please let me know.
-
-
-![](media/images/git-logo.png){.img-fluid width=30% fig-align="center"}
 
 
 # Prerequisites and Setup
@@ -109,96 +106,102 @@ following tools available:
 
 - **Terminal**: Any terminal emulator (iTerm2, Kitty,
   or the built-in Terminal.app)
-- **Bash or Zsh**: The scripts use standard POSIX
-  shell features and work in either shell
-- **Git**: For version control of the daily log
-  repository
-- **ripgrep** (`rg`): For fast, project-scoped search
-  across log entries
-- **pbcopy / pbpaste**: macOS clipboard utilities
-  (built in)
-- **ChatGPT**: A browser tab or desktop application
-  for dictation summarization
-- **macOS Dictation**: Enabled in System Settings
-  under Keyboard (press the microphone key or
-  double-tap the Function key)
+- **Bash**: The script is written for `bash`, not a
+  POSIX-portable shell
+- **`jq`**: Builds the JSON request bodies sent to the
+  Gemini API and parses the responses
+- **`curl`**: Makes the HTTPS calls to the Gemini API
+- **A Gemini API key**: Set `GEMINI_API_KEY` in
+  `~/.env`; the script sources that file with `set -a`
+  so plain `NAME=value` lines are exported automatically
+- **`ripgrep`** (`rg`): Used by the `-q` / `--quick`
+  flag, described below, though that flag currently has
+  no matching data source
+- **macOS System Events**: Only needed for `-i` /
+  `--input`, which pops an `osascript` dialog so
+  dictation (double-tap Fn) can be used instead of
+  typing into the terminal
 
-No R packages are required for this workflow. The
-entire system runs through the shell. If `ripgrep`
-is not yet installed, it can be added with Homebrew:
-
-```sh
-brew install ripgrep
-```
-
-
-# What is a ChatGPT-Assisted Research Log?
-
-A ChatGPT-assisted research log is a daily
-note-taking system where the researcher dictates
-progress notes using macOS voice input, submits the
-raw dictation to ChatGPT for summarization and
-formatting, and stores the resulting structured
-summary in a version-controlled text file. Think of
-it as having a research assistant who listens to one's
-stream-of-consciousness update and returns a clean,
-dated, project-tagged paragraph.
-
-The key insight is that the summarization step solves
-the primary pain point of voice-to-text workflows:
-raw dictation is verbose and poorly structured, but
-passing it through a language model produces concise,
-searchable entries that are suitable for long-term
-storage. The project-tagging convention (prefixing
-every line with the directory name) enables
-per-project retrieval from a single centralized log
-file.
-
-
-# Getting Started: Research Folder Structure
-
-A structured directory keeps research files accessible
-and prevents clutter. The following command creates a
-workspace with a central logging directory and ten
-project folders:
+No R packages are required. The entire tool runs
+through the shell:
 
 ```sh
-mkdir -p ~/prj/research_update \
-  ~/prj/{X1,X2,X3,X4,X5,X6,X7,X8,X9,X10}
+brew install jq ripgrep
 ```
 
-Each project folder should contain a consistent
-internal structure:
 
-- `notes.md`: Running log of project-specific notes
-- `references.bib`: Citation management
-- `data/`: Datasets and related files
-- `coding/`: Code and analyses
-- `figures/`: Graphs and visualizations
-- `tables/`: Data summaries
-- `archive/`: Storage for non-current files
+# What Is `tn`?
 
-The centralized daily log lives at a fixed location
-that all scripts reference:
-
-```
-~/prj/research_update/daily_log.md
-```
-
-This single file accumulates entries from every
-project. The project-tagging convention described in
-the next section makes it possible to filter entries
-by project despite storing everything in one place.
-
-Initialize the logging repository with Git so that
-every update is tracked:
+`tn` is a symlink in `~/bin` pointing at the actual
+script, `ai-notes-gemini`:
 
 ```sh
-cd ~/prj/research_update
-git init
-git add daily_log.md
-git commit -m "Initialize daily research log"
+$ ls -la ~/bin/tn
+lrwxr-xr-x 1 zenn staff 15 Jun 27 10:55 tn -> ai-notes-gemini
 ```
+
+It is a single ~720-line bash script, not a pipeline of
+smaller scripts. Every note-taking, reviewing, editing,
+and deleting operation is a mode of the same executable,
+dispatched from a `case` statement over its command-line
+flags.
+
+Each project gets its own file,
+`~/prj/research_update/<project>_notes.txt`, and each
+entry in that file follows a fixed, delimited format:
+
+```
+===== ENTRY: 2025-04-09 14:32:07 =====
+
+--- RAW ---
+<verbatim dictated or typed notes>
+
+--- SUMMARY ---
+<Gemini-generated summary>
+```
+
+That `===== ENTRY:` delimiter is what every review,
+edit, and delete operation locates entries by. The RAW
+section preserves exactly what was captured, and the
+SUMMARY section holds whatever the researcher accepted,
+edited, or asked Gemini to revise. Keeping both means the
+summary is never the only surviving copy of a note.
+
+
+# Getting Started: Notes Directory Layout
+
+The central notes directory is fixed inside the script:
+
+```sh
+notes_dir="$HOME/prj/research_update"
+```
+
+Because `~/prj` is a symlink into Dropbox, this
+directory is continuously synced off-machine, the same
+as any other project directory in the Workflow
+Construct. It is, however, **not a Git repository** on
+this machine, so there is no commit history, no diff
+view, and no way to recover a specific past state of a
+note file beyond whatever Dropbox's own version history
+retains. The original design for this workflow assumed
+Git would provide an audit trail; the script that
+actually got built does not touch Git at all.
+
+Running `ls ~/prj/research_update` shows one text file
+per project the tool has been used on:
+
+```
+11-blockchain-curriculum_notes.txt
+fisherexacttestrx2_notes.txt
+prj_notes.txt
+zzcollab_notes.txt
+zzlongplot_notes.txt
+```
+
+No setup step creates these files ahead of time; `tn`
+creates `${proj}_notes.txt` the first time notes are
+appended for a project whose name has not been seen
+before, after asking for confirmation (see below).
 
 
 ![A single handwritten index card filed behind a tabbed
@@ -206,180 +209,338 @@ divider in an open wooden card box: one day's entry in
 a running log](media/images/ambiance2.jpg){.img-fluid height=3.5in}
 
 
-# Deeper Analysis: The Three-Script Workflow
+# Deeper Analysis: How `tn` Works
 
-The entire system consists of three short bash scripts
-that chain together: `dp` generates the prompt, the
-append script commits the result, and `sp` searches
-the log. Each script is designed to be run from within
-a project directory so that the project name is
-captured automatically.
+## Capturing and Summarizing Notes (the default mode)
 
-
-## Script 1: The Dictation Prompt (`dp`)
-
-This script constructs a ChatGPT prompt that includes
-the current date, time, and project directory name. It
-copies the prompt to the clipboard so the researcher
-can paste it directly into ChatGPT.
+Running `tn` with no flags other than an optional
+project name captures notes and sends them to Gemini
+for summarization. The project name defaults to the
+current directory's basename:
 
 ```sh
-#!/usr/bin/env bash
-
-current_time=$(date +"%Y-%m-%d %H:%M:%S")
-current_dir=$(basename "$PWD")
-
-prompt="I'm an academic biostatistician. I'm working
-on a data analysis project. I'm about to dictate
-daily research progress notes.
-When I'm done, provide a concise summary that
-includes:
-
-1. The date and time of dictation
-($current_time). The line with date and time
-should be the second line of the summary. The
-first line should be blank. The date and time
-line should be enclosed in a box of ascii
-characters to set it apart.
-2. The name of the current research project
-directory ($current_dir).
-3. Each line of the summary including the blank
-line and the date and time line and enclosing
-box lines should begin with \"$current_dir:\"
-so that it can be extracted using ripgrep.
-
-The notes start here: "
-
-echo -n "$prompt" | pbcopy
-
-echo "Prompt copied to clipboard."
-echo "Paste it into ChatGPT when ready."
+proj="${proj:-$(basename "$PWD")}"
 ```
 
-The project-prefixing instruction in item 3 is the
-critical design decision. By requiring every line of
-the summary to begin with the directory name followed
-by a colon, the `sp` script can later extract all
-entries for a given project using a single `ripgrep`
-call. The ASCII box around the date and time creates a
-visual separator between entries when reviewing the
-raw log file.
-
-
-## The Dictation Process
-
-After running `dp`, the workflow proceeds as follows:
-
-1. Open ChatGPT in a browser or desktop application.
-2. Paste the prompt from the clipboard into the
-   ChatGPT input field.
-3. Submit the prompt so that ChatGPT is primed for
-   summarization.
-4. Click the ChatGPT microphone icon and dictate the
-   research notes. Speak naturally; there is no need
-   to say "new line" or "period" because ChatGPT will
-   handle formatting.
-5. Submit the dictated text for summarization.
-6. Review the summary. Iterate with ChatGPT (either
-   by voice or by typing) to refine the output.
-7. Copy the final summary to the clipboard.
-
-
-## Script 2: Append and Push
-
-This script reads the summary from the clipboard,
-appends it to the centralized daily log, and pushes
-the update to the remote Git repository. Save it
-somewhere on the `$PATH` (for example,
-`~/bin/append_log`).
+If the project's notes file does not exist yet, the
+script confirms the inferred name before proceeding
+rather than silently creating a file under the wrong
+name:
 
 ```sh
-#!/usr/bin/env bash
-
-current_dir=$(basename "$PWD")
-current_time=$(date +"%Y-%m-%d %H:%M:%S")
-
-clipboard_content=$(pbpaste)
-
-echo "$clipboard_content" \
-  >> ~/prj/research_update/daily_log.md
-echo "" >> ~/prj/research_update/daily_log.md
-
-echo "Update for $current_dir appended to"
-echo "daily_log.md in ~/prj/research_update"
-
-cd ~/prj/research_update
-git add .
-git commit -m "Daily log update $(date +'%Y-%m-%d')"
-git push
+if [ -z "$review_date" ] && [ -z "$last_n" ] && [ ! -f "$notes_file" ]; then
+  read -r -p "First use for project '$proj'. Is this correct? [Y/n] " confirm
+  ...
+fi
 ```
 
-The blank line appended after the clipboard content
-ensures that consecutive entries are visually
-separated in the log file.
-
-The commit message is a plain date, not the
-imperative-mood style used for hand-written commits.
-That is fine here: the script runs unattended, and a
-date is all the message needs to say.
-
-
-## Script 3: Search Project (`sp`)
-
-This script searches the daily log for all entries
-tagged with the current project directory name. The
-`cut -c6-` strips the directory prefix from each line
-for cleaner output. Adjust the cut range if the
-project directory names are longer than four
-characters.
+Input comes from one of two places. By default, the
+script reads from standard input until `Ctrl-D`. With
+`-i` / `--input`, it instead opens a native macOS dialog
+via `osascript`, which supports dictation (double-tap
+the Fn key) without needing a browser tab:
 
 ```sh
-#!/usr/bin/env bash
-current_dir=$(basename "$PWD")
-rg "$current_dir" \
-  ~/prj/research_update/daily_log.md \
-  | cut -c6-
+raw_notes_content=$(osascript <<EOF
+  tell application "System Events"
+    activate
+    set dialogResult to display dialog "Enter notes for: $proj" & return & return & "(Dictation: press Fn twice)" ¬
+      default answer "" ¬
+      buttons {"Cancel", "OK"} default button "OK" ¬
+      with title "tn - Research Notes"
+    return text returned of dialogResult
+  end tell
+EOF
+) || { echo "Cancelled."; exit 0; }
 ```
 
-Running `sp` from within `~/prj/X3/` will display
-every log entry tagged with `X3:`, regardless of when
-it was written. This is the retrieval mechanism that
-makes the single-file approach practical.
+The captured text is sent to Gemini through
+`summarize_notes`, which builds the request with `jq`
+and posts it with `curl`:
+
+```sh
+summarize_notes() {
+  local notes_content="$1"
+  local prompt
+  prompt=$(cat <<EOF
+You are Gemini, assisting an academic biostatistician.
+Summarize the following research notes concisely.
+- Set the line length to 74 characters.
+- The tone should be direct and clear.
+EOF
+)
+  local json_payload
+  json_payload=$(jq -n --arg prompt "$prompt" --arg notes "$notes_content" \
+    '{ "contents": [ { "parts": [ { "text": $prompt }, { "text": "\n\n" }, { "text": $notes } ] } ] }')
+
+  curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GEMINI_API_KEY" \
+    -H 'Content-Type: application/json' -X POST -d "$json_payload" \
+    | jq -r '.candidates[0].content.parts[0].text'
+}
+```
+
+The returned summary is shown, and the script drops into
+an accept, reject, edit, or revise loop before writing
+anything:
+
+```sh
+read -r -p "Accept summary? [Y/n/e(dit)/r(evise)] " choice
+```
+
+- `Y` (default) appends the entry as-is.
+- `n` discards the summary entirely; nothing is written.
+- `e` opens the summary in `$EDITOR` (falling back to
+  `vim`) and appends the edited text.
+- `r` prompts for free-text revision instructions,
+  sends the current summary and those instructions back
+  to Gemini via `revise_summary`, and loops so the new
+  result can itself be accepted, edited, or revised
+  again.
+
+Only an accepted (or edited) summary is written, via
+`append_entry`, which appends the full RAW-plus-SUMMARY
+block to the project's notes file with a single `>>`
+redirect.
+
+
+## Reviewing Past Entries: `-r`, `-n`, `-R`
+
+Both review modes route through a shared `awk`
+state-machine, `filter_entries`, that numbers entries as
+it prints them:
+
+```sh
+awk -v show_raw="$show_raw" -v date="$date_filter" -v num="$start_num" '
+  /^===== ENTRY:/ {
+    in_entry = (date == "" || $0 ~ date)
+    in_summary = 0
+    if (in_entry) {
+      sub(/^===== ENTRY:/, "===== [" num++ "] ENTRY:")
+      print
+    }
+    next
+  }
+  /^--- RAW ---/ { in_summary = 0; if (in_entry && show_raw == "true") print; next }
+  /^--- SUMMARY ---/ { in_summary = 1; if (in_entry && show_raw == "true") print; next }
+  in_entry && (show_raw == "true" || in_summary) { print }
+'
+```
+
+`tn -r myproject` lists every entry for `myproject`;
+`tn -r 2025-04-09 myproject` filters to entries whose
+header line matches that date substring. `tn -n 3
+myproject` shows only the three most recent entries,
+located by counting delimiter lines from the end of the
+file. In both cases, the SUMMARY section is shown by
+default; add `-R` / `--raw` to include the RAW section
+as well.
+
+
+## Editing and Deleting Entries: `-e` and `-d`
+
+Both commands locate an entry by 1-based index, with
+negative indices counting from the end (`-1` is the
+newest entry), and both work by finding the line range
+that entry occupies:
+
+```sh
+[ "$idx" -lt 0 ] && idx=$((total + idx + 1))
+...
+start_line=$(grep -n "^$DELIM" "$file" | sed -n "${idx}p" | cut -d: -f1)
+```
+
+`tn -d -1 myproject` previews the entry (up to 20 lines),
+asks for `[y/N]` confirmation, and then deletes the line
+range with:
+
+```sh
+sed -i '' -e "${start_line},${end_line}d" -e '/./,$!d' "$file"
+```
+
+`tn -e -1 myproject` opens just that entry's block in
+`$EDITOR`, optionally re-summarizes the edited RAW text
+through Gemini (running the same accept/edit/revise loop
+as note-taking), and then rebuilds the notes file as
+before-block, edited-block, after-block, writing to a
+temp file and `mv`-ing it over the original rather than
+editing in place:
+
+```sh
+rebuilt=$(mktemp)
+[ "$start_line" -gt 1 ] && sed -n "1,$((start_line - 1))p" "$file" > "$rebuilt"
+cat "$block" >> "$rebuilt"
+[ "$end_line" -lt "$last_line" ] && sed -n "$((end_line + 1)),${last_line}p" "$file" >> "$rebuilt"
+mv "$rebuilt" "$file"
+```
+
+That difference between the two commands, in-place
+`sed -i` for delete versus tempfile-and-`mv` for edit, is
+covered in the gotchas below.
+
+
+## Listing Projects and the Quick-Lookup Gap: `-l` and `-q`
+
+`tn -l` globs `*_notes.txt` in the notes directory and
+prints each project name with its entry count:
+
+```sh
+for f in "$notes_dir"/*_notes.txt; do
+  [ -f "$f" ] || continue
+  proj=$(basename "$f" _notes.txt)
+  count=$(grep -c "^$DELIM" "$f")
+  echo "  $proj ($count entries)"
+done
+```
+
+`tn -q` / `--quick` is meant to show notes for the
+current project without specifying a name, but it
+searches a different file than everything else in the
+script:
+
+```sh
+current_dir=$(basename "$PWD")
+daily_log="$notes_dir/daily_log.md"
+if [ -f "$daily_log" ]; then
+  rg "$current_dir" "$daily_log" | cut -c1-
+else
+  echo "No daily_log.md found in $notes_dir"
+fi
+```
+
+Nothing in `tn` writes to `daily_log.md`. It is a
+holdover from the earlier tagged-single-log design that
+never got wired up to the per-project notes files this
+script actually maintains. On this machine, no such file
+exists in `~/prj/research_update`, so `-q` currently
+always falls into the "No daily_log.md found" branch.
+`tn -l` followed by `tn -r <project>` is the working
+substitute.
 
 
 ## Things to Watch Out For
 
-1. **Clipboard conflicts.** Copying anything else
-   between running `dp` and pasting into ChatGPT
-   will overwrite the prompt. Run `dp` immediately
-   before switching to ChatGPT.
+1. **`--delete` edits the notes file in place; `--edit`
+   deliberately does not.** `delete_entry` runs
+   `sed -i ''` directly against a file inside
+   `~/prj/research_update`, which is a Dropbox-synced
+   path. `edit_entry`, in the same script, explicitly
+   avoids in-place editing for this reason, writing a
+   fresh tempfile and `mv`-ing it over the original
+   instead. In-place editors that write-then-rename can
+   race with a sync in progress on a cloud-mounted
+   directory; `delete_entry` does not have that
+   protection. Deleting entries during an active Dropbox
+   sync is the highest-risk operation in this script.
 
-2. **Project directory naming.** The `ripgrep` search
-   matches on directory name, so avoid names that are
-   substrings of other names. `X1` will match `X10`
-   entries. Use names like `proj_alpha` instead of
-   sequential numbers when managing many projects.
+2. **`-q` / `--quick` does not read from where notes are
+   written.** It searches `daily_log.md`, a file nothing
+   in `tn` populates and which does not currently exist.
+   Treat `-q` as unimplemented rather than broken, and use
+   `-r` with an explicit project name instead.
 
-3. **Git remote setup.** The append script assumes a
-   remote is configured. Run `git remote add origin
-   <url>` in `~/prj/research_update/` before using
-   the push feature for the first time.
+3. **No version control on the notes files themselves.**
+   `~/prj/research_update` is not a Git repository. Notes
+   are protected only by Dropbox's file-sync history, not
+   by commit-level diffs or an audit trail.
 
-4. **Dictation accuracy.** macOS dictation works best
-   in a quiet environment. Technical terms
-   (biostatistics jargon, package names, function
-   names) are often misheard. Review the ChatGPT
-   summary carefully before appending.
+4. **Every note-taking or edit-with-resummarize call
+   requires network access and a valid `GEMINI_API_KEY`.**
+   There is no retry or offline fallback; a failed `curl`
+   call surfaces whatever Gemini's API returned, unparsed,
+   through the `jq -r` pipeline.
 
-5. **Cut column offset.** The `cut -c6-` in the
-   search script assumes a four-character project
-   name plus a colon and space. Adjust this value if
-   directory names are longer than four characters.
+5. **Delete confirmation shows only the first 20 lines**
+   (`head -20`) of the entry being removed. A long entry
+   will not fully preview before the `[y/N]` prompt.
+
+6. **Project directory naming still matters for `-l`.**
+   Because notes files are keyed by `basename "$PWD"`,
+   entering the wrong directory before running `tn`
+   silently starts (or appends to) a differently-named
+   project file.
 
 
 ![A stack of identical dated notebooks of increasing
 height, the newest on top still open: accumulated
 daily records over time](media/images/ambiance3.jpg){.img-fluid height=3.5in}
+
+
+# A Typical Mid-Analysis Session
+
+Everything above describes what `tn` does in isolation.
+In practice it is one step inside a larger session on a
+zzc-scaffolded analysis repo, not project initiation and
+not the final push toward publishing. Session five or
+session ten on an established project looks the same
+every time: resume where the last session left off, do
+the analysis work, then close out cleanly before
+switching to something else. `tn` sits at both ends of
+that pattern, not in the middle.
+
+## Before: Resuming the Session
+
+1. **Reattach rather than start fresh.** If a session for
+   the project is already running, reattach it; otherwise
+   `cd` into the project directory.
+2. **Check for uncommitted work from last time** with
+   `git status`. A session that ended without a commit is
+   a sign step 5 below got skipped previously; resolve it
+   before layering new changes on top.
+3. **Recall the last entry** before diving back in:
+   `tn -n 1 <project>`. This surfaces whatever was logged
+   at the end of the previous session, what was tried,
+   what broke, what was next, without reconstructing it
+   from memory or from the code alone.
+4. **Enter the container** with `make r` (or
+   `make docker-rstudio`). Any package installed from
+   inside the container during the session is captured
+   automatically in `renv.lock` when the R session exits.
+
+## During: The Analysis Work Itself
+
+This part has no fixed shape: iterating on code,
+rendering intermediate output, checking results against
+expectations. That is precisely why sessions five and
+ten look different from session one, there is no setup
+checklist to work through here, just the analysis.
+
+## After: Closing Out the Session
+
+1. **Exit the container** back to the host shell.
+2. **Validate dependencies** with `make check-renv`, run
+   from the host, not from inside the container. This
+   catches any package that got used during the session
+   but never made it into `DESCRIPTION` or `renv.lock`.
+3. **Run the test suite** if the session changed anything
+   beyond exploratory scratch work, with `make
+   docker-test`. Skip this for a session that was pure
+   data exploration with no code changes worth testing.
+4. **Commit the work**, with a message describing what
+   changed, not a placeholder. `zzgit` (or `git add` and
+   `git commit` directly) stages, scans, and commits in
+   one step.
+5. **Log the session with `tn`, not with the commit
+   message.** The commit message is a record of what
+   changed in the code; the `tn` entry is a record of
+   what was learned, what did not work, and what the next
+   session should pick up. Running `tn` (or `tn -i` for a
+   dictated version) captures that, and the accept, edit,
+   revise loop means it takes a few seconds even when the
+   day's work does not summarize itself cleanly.
+6. **Push, if working across more than one machine**, and
+   do not assume this backs up the `tn` entry too. Notes
+   captured by `tn` are not part of the project's Git
+   history (see the limitations above); pushing the code
+   commit does nothing for the day's `tn` entry, since
+   `~/prj/research_update` lives outside the project
+   repository entirely.
+
+Point 6 is worth restating on its own: the `tn` entry and
+the project's Git commit are two separate trails that
+happen to close out at the same moment in this workflow,
+not one combined mechanism. Losing sight of that is an
+easy way to assume notes are backed up by a `git push`
+that never touched them.
 
 
 # What Did We Learn?
@@ -388,150 +549,164 @@ daily records over time](media/images/ambiance3.jpg){.img-fluid height=3.5in}
 
 **Conceptual Understanding:**
 
-- A single centralized log file with project-tagged
-  lines is more practical than per-project log files
-  because it supports cross-project search and
-  provides a chronological record of all research
-  activity.
-- Voice dictation followed by language model
-  summarization produces higher-quality log entries
-  than direct typing because the researcher can speak
-  freely without worrying about formatting.
-- The project-prefix convention (every line begins
-  with the directory name) is a simple but effective
-  tagging system that enables structured retrieval
-  from an unstructured text file.
-- Version-controlling the daily log with Git provides
-  an immutable audit trail that satisfies
-  reproducibility requirements for academic research.
+- A single script that calls the summarization API
+  directly removes an entire manual step, and its
+  associated failure mode, compared with a workflow that
+  round-trips through a browser tab and the clipboard.
+- Separate per-project files, rather than one tagged
+  central log, make deletion and editing tractable:
+  operating on `${proj}_notes.txt` means every index and
+  line-range calculation only has to reason about one
+  project's entries.
+- Keeping both the raw dictation and the generated
+  summary in every entry means an unsatisfactory summary
+  is recoverable without re-dictating the notes.
+- A script can accrete real functionality, review,
+  edit, delete, well past its original scope, while still
+  leaving a piece of the original design (`daily_log.md`)
+  unconnected. Reading the code, not just the `--help`
+  text, is the only way to find that kind of gap.
 
 **Technical Skills:**
 
-- Using `pbcopy` and `pbpaste` to pass data between
-  shell scripts and GUI applications (ChatGPT)
-  through the macOS clipboard.
-- Writing bash scripts that extract context
-  automatically (`basename "$PWD"` for the project
-  name, `date` for timestamps) to minimize manual
-  input.
-- Using `ripgrep` with simple string patterns for
-  fast retrieval from large text files.
-- Chaining `git add`, `git commit`, and `git push`
-  in a single script to reduce version control
-  friction to a single command.
+- Using `jq -n --arg` to build a JSON request body
+  from shell variables safely, and `jq -r` to extract a
+  nested field from the response, without any manual
+  string escaping.
+- Writing an `awk` state machine that tracks which
+  section of a multi-line, delimited record it is
+  currently inside (`in_entry`, `in_summary`) rather
+  than trying to express the whole thing as a single
+  regular expression.
+- Converting a negative, "from the end" index to a
+  positive one with `$((total + idx + 1))`, and reusing
+  that conversion identically in both the delete and
+  edit code paths.
+- Preferring `mktemp` plus `mv` over `sed -i` when a
+  file lives on a cloud-synced path, and recognizing
+  that this preference has to be applied consistently
+  across every function that rewrites the same file.
 
 **Gotchas and Pitfalls:**
 
-- The clipboard is a shared resource: any copy
-  operation between `dp` and the paste step will
-  overwrite the prompt. Minimize context switching.
-- macOS dictation sometimes fails silently if the
-  microphone permissions are not granted to the
-  active application. Verify in System Settings.
-- The `cut -c6-` column offset in the search script
-  is fragile. If project directory names vary in
-  length, consider using `sed` to strip the prefix
-  instead: `sed "s/^$current_dir: //"`.
-- If the Git remote is unreachable (network issues),
-  the push will fail but the local commit still
-  succeeds. The log entry is preserved locally; push
-  manually when connectivity returns.
+- `sed -i ''` (the empty string is required on macOS's
+  BSD `sed`) is easy to reach for out of habit even in a
+  script that elsewhere goes out of its way to avoid
+  in-place edits on synced paths.
+- A feature described in `--help` text (`-q`, quick
+  lookup) can be present in the flag-parsing logic and
+  the dispatch table while never actually being wired to
+  real data. The flag "working" (producing output, even
+  if that output is a not-found message) is not the same
+  as the flag doing what its help text claims.
+- Environment variables sourced from `~/.env` via
+  `set -a` are exported for the whole script, including
+  every subshell `curl` call; a missing or stale
+  `GEMINI_API_KEY` fails at the API call, not at
+  startup, unless explicitly checked first (which the
+  note-taking path does, but the edit-with-resummarize
+  path only checks conditionally).
 
 
 ## Limitations
 
 - This workflow is macOS-specific due to its reliance
-  on `pbcopy`, `pbpaste`, and macOS dictation.
-  Adapting it to Linux would require `xclip` or
-  `xsel` and a different speech-to-text tool.
-- The system depends on ChatGPT availability. If the
-  service is down or the API changes, the
-  summarization step fails, though dictated notes can
-  still be appended manually.
-- There is no automated backup beyond Git. If the
-  local repository is corrupted and the remote is
-  lost, all log entries are unrecoverable.
-- The project-prefix tagging convention does not
-  support hierarchical organization (sub-projects,
-  milestones, or categories within a project).
-- The workflow does not handle attachments, images,
-  or structured data. It is text-only by design.
-- Long-running projects will accumulate large numbers
-  of entries in a single file. Performance of
-  `ripgrep` remains excellent at scale, but human
-  readability of the raw file degrades over time.
+  on `osascript` and System Events for the `-i` dictation
+  dialog.
+- The system depends on Gemini API availability and a
+  funded or quota-available API key. If the call fails,
+  the raw notes are never lost (they exist in memory
+  until the script exits) but they are also not saved
+  automatically; there is no "save raw notes even if
+  summarization fails" path.
+- There is no automated backup beyond Dropbox's file
+  sync. Unlike a Git-backed log, there is no way to
+  inspect what a note file looked like before a given
+  delete or edit.
+- `-q` / `--quick` is effectively dead code on this
+  machine: the file it reads does not exist, and nothing
+  in the script would create it.
+- `delete_entry`'s in-place `sed -i` is a real risk on a
+  Dropbox-synced notes directory, more so than any other
+  operation in the script.
+- The workflow does not handle attachments, images, or
+  structured data. It is text-only by design.
 
 
 ## Opportunities for Improvement
 
-1. **Direct ChatGPT API integration.** In theory, it
-   should be possible to send dictated text directly
-   to the ChatGPT API from a bash script, bypassing
-   the browser entirely. This would reduce the
-   workflow from three manual steps to one command.
+1. **Harden `delete_entry` to match `edit_entry`.**
+   Rewrite it to build the post-delete content in a
+   tempfile and `mv` it into place, the same pattern
+   `edit_entry` already uses, removing the one in-place
+   edit left in the script.
 
-2. **Whisper for local transcription.** Replacing
-   macOS dictation with OpenAI Whisper running
-   locally would improve transcription accuracy for
-   technical terminology and remove the dependency on
-   macOS-specific features.
+2. **Either wire up `-q` or remove it.** Either have the
+   append path also write a project-tagged line to
+   `daily_log.md`, restoring the original quick-lookup
+   design, or have `-q` fall through to `tn -r <current
+   project>` against the per-project file that already
+   holds the data.
 
-3. **Structured output format.** Switching the log
-   from plain text to a structured format (JSON or
-   YAML) would enable richer queries, date-range
-   filtering, and integration with analysis
-   dashboards.
+3. **Initialize `~/prj/research_update` as a Git
+   repository**, with an automatic commit after each
+   append, edit, or delete, to restore the audit-trail
+   guarantee the original design assumed Git would
+   provide.
 
-4. **Automated daily reminders.** A cron job or
-   `launchd` agent that opens a terminal prompt at a
-   set time each day would reduce the likelihood of
-   forgetting to log.
+4. **A lockfile around edit and delete.** Two terminals
+   running `tn -e` or `tn -d` against the same project
+   at once could race on the same `mktemp`-plus-`mv`
+   rebuild; a simple `flock` around the notes file would
+   close that gap.
 
-5. **Cross-platform support.** Abstracting the
-   clipboard commands behind environment detection
-   (`pbcopy` on macOS, `xclip` on Linux, `clip.exe`
-   on WSL) would make the scripts portable.
+5. **Parameterize the Gemini model and prompt.** The
+   model name (`gemini-2.5-flash`) and the summarization
+   prompt are both hardcoded in `summarize_notes`;
+   pulling them from `~/.env` or a config file would make
+   the summarization style adjustable without editing the
+   script.
 
-6. **Log visualization.** A simple R or Python script
-   that parses the daily log and generates a timeline
-   or heatmap of research activity per project would
-   add a useful retrospective view.
+6. **Log visualization.** A simple script that walks
+   every `*_notes.txt` file and generates a timeline of
+   entry counts per project over time would add a useful
+   retrospective view, similar to what `-l` already
+   sketches with its entry counts.
 
 
 # Wrapping Up
 
-This workflow turns daily research logging from a
-chore into a lightweight habit. The entire process
-(dictating notes, generating a summary, appending
-to the log, and pushing to Git) takes under ninety
-seconds once the scripts are in place.
+The script that is actually in daily use is simpler in
+one respect than the original three-script design (one
+executable, no clipboard hand-off) and considerably more
+capable in another (review, edit, delete, and a full
+revision loop on every generated summary). What I found
+most valuable was removing the browser from the loop
+entirely: dictate, or type, directly at the terminal or
+into a native macOS dialog, and let the script call
+Gemini itself.
 
-What I found most valuable was the reduction in
-friction. Before this system, I would skip logging on
-busy days because the overhead felt too high. With
-voice dictation and automated summarization, the
-barrier dropped low enough that daily logging became
-sustainable.
+Researchers managing multiple concurrent projects who
+want per-project note files with real edit and delete
+support, not just append-only logging, may find this
+approach worth adapting. Reading through `tn` end to
+end, rather than trusting its `--help` output, is also a
+useful reminder that a script's documentation and its
+actual behavior can drift apart as functionality is
+added incrementally; the `-q` gap here is a concrete
+example of exactly that.
 
-Researchers managing multiple concurrent projects
-who struggle to maintain consistent progress records
-may find this approach worth adopting. The three
-scripts are short enough to customise in an
-afternoon, and the payoff in searchable,
-version-controlled documentation accumulates rapidly.
-
-In conclusion, four points merit emphasis. First,
-three bash scripts (`dp`, append, `sp`) together
-provide a complete dictation-to-search workflow
-without additional tooling. Second, ChatGPT
-summarization converts raw voice dictation into
-concise, structured log entries suitable for
-long-term storage. Third, project-prefixed lines
-enable per-project retrieval from a single
-centralized log file, eliminating the need for
-per-project files. Fourth, Git integration provides
-version control and remote backup with no effort
-beyond what the append script already performs.
+In conclusion, four points merit emphasis. First, a
+single script calling an LLM API directly removes both
+the browser and the clipboard from the note-taking loop.
+Second, per-project files rather than one tagged central
+log make deletion and editing by index tractable. Third,
+consistency in how a script rewrites its own data files
+matters: `edit_entry`'s tempfile-and-`mv` pattern should
+have been applied to `delete_entry` as well, and was not.
+Fourth, a feature can exist in a script's flag parser and
+help text without being connected to real data, which is
+exactly the state of `-q` today.
 
 
 # See Also
@@ -544,57 +719,60 @@ beyond what the append script already performs.
 - [Multi-Laptop macOS Bootstrap](
   ../wf-multi-laptop-dotfiles-bootstrap/): Managing configuration files
   across machines
+- [Refactoring a Personal Toolbox: Scripts versus Shell
+  Functions](../sh-scripts-vs-functions/): The broader `~/bin` cleanup
+  that flagged `tn` alongside other overlapping note-capture scripts
+- [The 55-Item Preparation Checklist](
+  ../zc-analysis-initiation-checklist/): The one-time setup checklist
+  for a new zzc project; the mid-analysis session workflow above is
+  what happens on every session after that checklist is done
 
 **Key resources:**
 
-- [ripgrep documentation](
-  https://github.com/BurntSushi/ripgrep): The
-  search tool used in the `sp` script
-- [OpenAI Whisper](
-  https://github.com/openai/whisper): Local
-  speech-to-text alternative to macOS dictation
-- [Git documentation](https://git-scm.com/doc):
-  Reference for the version control commands used
-  in the append script
+- [Gemini API documentation](
+  https://ai.google.dev/gemini-api/docs): Reference for the
+  `generateContent` endpoint used by `summarize_notes`
+- [`jq` manual](https://jqlang.org/manual/): Reference
+  for the JSON construction and parsing used throughout
 - [macOS Dictation guide (Apple Support)](
   https://support.apple.com/guide/mac-help/
   use-dictation-mh40584/mac): Setup instructions
-  for the built-in dictation feature
+  for dictation inside the `-i` dialog
 
 
 # Reproducibility
 
 This post describes a shell-based workflow with no R
-analysis pipeline. To reproduce the system, create the
-three scripts described above and place them on the
-`$PATH`:
+analysis pipeline. To reproduce it, place the script on
+the `$PATH` and set the required API key:
 
 ```sh
 mkdir -p ~/bin
 
-cp dp.sh ~/bin/dp
-cp append_log.sh ~/bin/append_log
-cp sp.sh ~/bin/sp
+cp ai-notes-gemini ~/bin/ai-notes-gemini
+chmod +x ~/bin/ai-notes-gemini
+ln -s ai-notes-gemini ~/bin/tn
 
-chmod +x ~/bin/dp ~/bin/append_log ~/bin/sp
+echo 'GEMINI_API_KEY=your_key_here' >> ~/.env
 
 export PATH="$HOME/bin:$PATH"
 ```
 
 **System requirements:**
 
-- macOS 13+ (Ventura or later) for reliable dictation
-- Git 2.30+
-- ripgrep 13.0+
-- A ChatGPT account (free tier is sufficient)
+- macOS, for the `-i` dictation dialog (the rest of the
+  script has no macOS-only dependency beyond that)
+- `bash`, `jq`, `curl`
+- A Gemini API key with `generateContent` access
+- `ripgrep`, only if `-q` is wired up per the
+  improvement suggestions above; unused otherwise
 
 **Files in this post:**
 
-| File | Purpose |
-|------|---------|
-| `dp` | Generate ChatGPT dictation prompt |
-| `append_log` | Append summary and push to Git |
-| `sp` | Search log by project name |
+| File             | Purpose                                          |
+|------------------|---------------------------------------------------|
+| `ai-notes-gemini`| The script itself: capture, summarize, review, edit, delete |
+| `tn`             | Symlink to `ai-notes-gemini` on `$PATH`          |
 
 
 # Let's Connect
@@ -624,4 +802,3 @@ Recommended reading order:
 
 1. Post 41: [Refactoring a Personal Toolbox: Scripts versus Shell Functions](../sh-scripts-vs-functions/)
 2. **Post 43: A Mac Workflow for Tracking Daily Research Progress** (this post)
-
