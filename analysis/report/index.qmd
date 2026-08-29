@@ -6,7 +6,7 @@ categories: [shell, git, macos]
 description: "tn is a single bash script that talks to the Gemini API directly, stores one note file per research project, and supports reviewing, editing, and deleting past entries. This post documents what the script actually does, not the three-script ChatGPT-and-clipboard sketch it replaced."
 image: "media/images/hero.png"
 document-type: "blog"
-draft: true
+draft: false
 execute:
   echo: true
   warning: false
