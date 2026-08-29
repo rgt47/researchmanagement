@@ -35,11 +35,11 @@ the entry, and committing the changes felt like too
 many steps for something that should take sixty
 seconds.
 
-The first version of this idea, sketched out but never
-actually built, was a three-script pipeline: dictate
-into ChatGPT's web interface, copy the summary to the
-clipboard, and run a script to append it to a single
-tagged log file. What I actually ended up building and
+The first version of this idea was sketched out but
+never actually built. It was a three-script pipeline:
+dictate into ChatGPT's web interface, copy the summary
+to the clipboard, and run a script to append it to a
+single tagged log file. What I actually ended up building and
 using every day is different in almost every respect.
 It is one script, `tn`, and it talks to Google's Gemini
 API directly through `curl`, with no browser and no
@@ -48,15 +48,15 @@ clipboard hop in the middle.
 This post documents `tn` as it exists on disk today:
 what it stores, how the pieces fit together, and where
 its rough edges are. Some of those rough edges are
-worth calling out explicitly, because they are the kind
-of thing that is easy to miss when a script has grown
+worth calling out explicitly. They are the kind of
+thing that is easy to miss when a script has grown
 past its original design in small increments.
 
 More formally, this documents the file-system layer of
 the Workflow Construct described in
 [A Workflow Construct for the Modern Data Scientist](../wf-construct-overview-anchor/). The convention that
 all research projects live under `~/prj/NN-name/` and are synced
-continuously by Dropbox is the substrate `tn` depends on: its
+continuously by Dropbox is the substrate `tn` depends on. Its
 notes directory, `~/prj/research_update`, is itself a Dropbox-synced
 path, even though (as covered below) it is not a Git repository.
 
